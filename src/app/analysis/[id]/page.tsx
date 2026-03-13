@@ -30,14 +30,10 @@ export default async function AnalysisPage({ params }: AnalysisPageProps) {
 
   const extracted = analysis.extracted_data as {
     risk_level?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-    total_recoverable?: number
-    financials?: { overcharge_amount?: number; appealable_amount?: number }
   } | null
 
   const riskLevel = (extracted?.risk_level ?? 'LOW') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-  const totalRecoverable =
-    extracted?.total_recoverable ??
-    ((extracted?.financials?.overcharge_amount ?? 0) + (extracted?.financials?.appealable_amount ?? 0))
+  const totalRecoverable = issues.reduce((sum, issue) => sum + issue.amount_at_risk, 0)
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
@@ -76,7 +72,7 @@ export default async function AnalysisPage({ params }: AnalysisPageProps) {
         <hr className="border-gray-200" />
 
         {/* CTA */}
-        <GenerateLetterButton />
+        <GenerateLetterButton analysisId={id} />
       </div>
     </div>
   )
