@@ -1,36 +1,86 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OverBilled
+
+Upload a medical bill or denial letter and get a dispute letter ready to send in minutes.
+
+## Tech Stack
+
+- **Next.js 15** (App Router) + **TypeScript**
+- **Tailwind CSS**
+- **Supabase** — auth, Postgres, storage
+- **Anthropic Claude API** — document extraction and analysis
 
 ## Getting Started
 
-First, run the development server:
+```bash
+git clone https://github.com/your-org/overbilled.git
+cd overbilled
+npm install
+```
+
+Copy the environment template and fill in your values:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Apply the database schema in the Supabase SQL editor:
+
+```bash
+# paste contents of supabase/schema.sql into the Supabase dashboard SQL editor
+# or use the Supabase CLI:
+supabase db push
+```
+
+Run the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Description | Where to get it |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Supabase dashboard → Project Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key | Supabase dashboard → Project Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-only) | Supabase dashboard → Project Settings → API |
+| `ANTHROPIC_API_KEY` | Anthropic API key | console.anthropic.com → API Keys |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+```
+src/
+  lib/
+    analyze.ts              # Core extraction logic — calls Claude with a structured
+                            # prompt, parses the JSON response into AnalysisResult
+    anthropic.ts            # Anthropic client singleton
+    supabase/
+      client.ts             # Browser Supabase client
+      server.ts             # Server-side Supabase client (uses service role)
+  app/
+    api/
+      analyze/
+        route.ts            # POST /api/analyze — validates auth, uploads file to
+                            # Supabase Storage, runs Claude extraction, writes
+                            # documents + analyses rows, returns structured result
 
-To learn more about Next.js, take a look at the following resources:
+supabase/
+  schema.sql                # Full Postgres schema: users, documents, analyses,
+                            # letters tables with RLS policies
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+docs/
+  specs/                    # Feature specs and API test plans
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Database Tables
 
-## Deploy on Vercel
+| Table | Description |
+|---|---|
+| `users` | Extends Supabase auth; stores profile data |
+| `documents` | Uploaded file metadata, status (`uploaded → processing → analyzed`) |
+| `analyses` | Claude extraction output: `extracted_data` (JSONB), `issues` (JSONB), `summary` |
+| `letters` | Generated dispute letters tied to a document and analysis |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Supported File Types
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`application/pdf`, `image/jpeg`, `image/png`, `image/webp` — max 10 MB.
