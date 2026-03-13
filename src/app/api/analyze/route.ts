@@ -8,12 +8,12 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024
 export async function POST(request: Request) {
   const supabase = await createClient()
 
+  // Support both Bearer token (API/scripts) and cookie-based session (browser)
   const token = request.headers.get('authorization')?.replace('Bearer ', '')
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { data: { user }, error: authError } = token
+    ? await supabase.auth.getUser(token)
+    : await supabase.auth.getUser()
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
   }
 
   // Step 4: Write analysis to database
-  const { issues, summary, total_recoverable, ...extractedData } = result
+  const { issues, summary, ...extractedData } = result
 
   const { data: analysis, error: analysisError } = await supabase
     .from('analyses')
