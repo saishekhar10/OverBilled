@@ -64,7 +64,7 @@ export default async function LetterPage({ params }: LetterPageProps) {
         {/* Actions */}
         <div className="flex gap-3">
           <CopyLetterButton content={letter.content} />
-          <DownloadPdfButton />
+          <DownloadPdfButton letterId={id} />
         </div>
       </div>
     </div>
