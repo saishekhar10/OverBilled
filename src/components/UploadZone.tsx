@@ -6,6 +6,61 @@ import { useRouter } from 'next/navigation'
 const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
 const MAX_SIZE = 10 * 1024 * 1024
 
+const US_STATES = [
+  { value: '', label: 'Select state' },
+  { value: 'AL', label: 'Alabama' },
+  { value: 'AK', label: 'Alaska' },
+  { value: 'AZ', label: 'Arizona' },
+  { value: 'AR', label: 'Arkansas' },
+  { value: 'CA', label: 'California' },
+  { value: 'CO', label: 'Colorado' },
+  { value: 'CT', label: 'Connecticut' },
+  { value: 'DE', label: 'Delaware' },
+  { value: 'DC', label: 'District of Columbia' },
+  { value: 'FL', label: 'Florida' },
+  { value: 'GA', label: 'Georgia' },
+  { value: 'HI', label: 'Hawaii' },
+  { value: 'ID', label: 'Idaho' },
+  { value: 'IL', label: 'Illinois' },
+  { value: 'IN', label: 'Indiana' },
+  { value: 'IA', label: 'Iowa' },
+  { value: 'KS', label: 'Kansas' },
+  { value: 'KY', label: 'Kentucky' },
+  { value: 'LA', label: 'Louisiana' },
+  { value: 'ME', label: 'Maine' },
+  { value: 'MD', label: 'Maryland' },
+  { value: 'MA', label: 'Massachusetts' },
+  { value: 'MI', label: 'Michigan' },
+  { value: 'MN', label: 'Minnesota' },
+  { value: 'MS', label: 'Mississippi' },
+  { value: 'MO', label: 'Missouri' },
+  { value: 'MT', label: 'Montana' },
+  { value: 'NE', label: 'Nebraska' },
+  { value: 'NV', label: 'Nevada' },
+  { value: 'NH', label: 'New Hampshire' },
+  { value: 'NJ', label: 'New Jersey' },
+  { value: 'NM', label: 'New Mexico' },
+  { value: 'NY', label: 'New York' },
+  { value: 'NC', label: 'North Carolina' },
+  { value: 'ND', label: 'North Dakota' },
+  { value: 'OH', label: 'Ohio' },
+  { value: 'OK', label: 'Oklahoma' },
+  { value: 'OR', label: 'Oregon' },
+  { value: 'PA', label: 'Pennsylvania' },
+  { value: 'RI', label: 'Rhode Island' },
+  { value: 'SC', label: 'South Carolina' },
+  { value: 'SD', label: 'South Dakota' },
+  { value: 'TN', label: 'Tennessee' },
+  { value: 'TX', label: 'Texas' },
+  { value: 'UT', label: 'Utah' },
+  { value: 'VT', label: 'Vermont' },
+  { value: 'VA', label: 'Virginia' },
+  { value: 'WA', label: 'Washington' },
+  { value: 'WV', label: 'West Virginia' },
+  { value: 'WI', label: 'Wisconsin' },
+  { value: 'WY', label: 'Wyoming' },
+]
+
 type State = 'idle' | 'selected' | 'uploading' | 'error'
 
 function formatBytes(bytes: number): string {
@@ -18,6 +73,8 @@ export default function UploadZone() {
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState('')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [providerState, setProviderState] = useState('')
+  const [providerCounty, setProviderCounty] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
@@ -63,12 +120,17 @@ export default function UploadZone() {
   }
 
   const handleSubmit = async () => {
-    if (!file) return
+    if (!file || !providerState || !providerCounty) {
+      setError('Please select a file and enter the provider\'s state and county.')
+      return
+    }
     setState('uploading')
     setError('')
 
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('provider_state', providerState.trim().toUpperCase())
+    formData.append('provider_county', providerCounty.trim().toUpperCase())
 
     try {
       const res = await fetch('/api/analyze', {
@@ -113,8 +175,40 @@ export default function UploadZone() {
     )
   }
 
+  const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-gray-400 bg-white'
+
   return (
     <div>
+      {/* Provider location */}
+      <div className="mb-4">
+        <p className="text-gray-700 font-medium text-sm mb-3">Provider location</p>
+        <div className="flex gap-3">
+          <div style={{ width: '40%' }}>
+            <label className="block text-gray-500 text-xs font-medium mb-1">State</label>
+            <select
+              value={providerState}
+              onChange={(e) => setProviderState(e.target.value)}
+              className={inputClass}
+            >
+              {US_STATES.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{ width: '55%' }}>
+            <label className="block text-gray-500 text-xs font-medium mb-1">County</label>
+            <input
+              type="text"
+              value={providerCounty}
+              onChange={(e) => setProviderCounty(e.target.value)}
+              placeholder="e.g. Harris County"
+              className={inputClass}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* File drop zone */}
       <div
         className={`border-2 border-dashed rounded-xl transition-colors cursor-pointer ${borderClass}`}
         onDragOver={handleDragOver}
@@ -160,6 +254,7 @@ export default function UploadZone() {
             <button
               type="button"
               onClick={handleSubmit}
+              disabled={!providerState || !providerCounty}
               className="w-full bg-gray-900 text-white rounded-lg py-2.5 font-medium hover:bg-gray-800 disabled:opacity-50"
             >
               Analyze document

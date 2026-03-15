@@ -42,7 +42,7 @@ async function main() {
   console.log('Sending to Claude...\n')
 
   const buffer = fs.readFileSync(absolutePath)
-  const result = await analyzeDocument(buffer, mimeType)
+  const result = await analyzeDocument(buffer, mimeType, 'TX', 'HARRIS')
 
   console.log(JSON.stringify(result, null, 2))
 }

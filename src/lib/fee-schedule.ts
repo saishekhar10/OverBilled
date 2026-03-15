@@ -41,6 +41,9 @@ export async function parseProviderLocation(
   const stateNameMatch = address.match(
     /,\s*([A-Za-z\s]+),\s*([A-Z]{2})\b/
   )
+  // Handles the "COUNTY, ST" format produced by the enrichment step
+  // (single comma, two-letter uppercase state abbreviation at end)
+  const simpleMatch = address.match(/^([^,]+),\s*([A-Z]{2})$/)
 
   let stateAbbr: string | null = null
   let cityOrCounty: string | null = null
@@ -51,6 +54,10 @@ export async function parseProviderLocation(
   if (stateNameMatch) {
     cityOrCounty = stateNameMatch[1].trim()
     stateAbbr = stateAbbr ?? stateNameMatch[2]
+  }
+  if (simpleMatch) {
+    cityOrCounty = cityOrCounty ?? simpleMatch[1].trim()
+    stateAbbr = stateAbbr ?? simpleMatch[2]
   }
 
   // If regex got both pieces we don't need Claude
@@ -131,18 +138,31 @@ export async function lookupMedicareRate(
 
     // Try specific locality first
     if (location.county_or_city) {
-      const { data: specific } = await supabase
-        .from('locality_county')
-        .select('locality_number, locality_name')
-        .eq('state', state)
-        .eq('is_statewide', false)
-        .ilike('counties', `%${location.county_or_city}%`)
-        .limit(1)
-        .single()
+      // The CMS LOCCO file stores county names without the "County" suffix
+      // (e.g. "KING" not "KING COUNTY"), so strip common suffixes before searching.
+      const stripped = location.county_or_city
+        .replace(/\s+(County|Parish|Borough|Municipality|Census\s+Area|City\s+and\s+County)$/i, '')
+        .trim()
+      // Try the stripped name first; fall back to the original if it returns nothing.
+      const searchTerms = stripped !== location.county_or_city
+        ? [stripped, location.county_or_city]
+        : [location.county_or_city]
 
-      if (specific) {
-        localityNumber = specific.locality_number
-        localityName = specific.locality_name
+      for (const term of searchTerms) {
+        const { data: specific } = await supabase
+          .from('locality_county')
+          .select('locality_number, locality_name')
+          .eq('state', state)
+          .eq('is_statewide', false)
+          .ilike('counties', `%${term}%`)
+          .limit(1)
+          .single()
+
+        if (specific) {
+          localityNumber = specific.locality_number
+          localityName = specific.locality_name
+          break
+        }
       }
     }
 

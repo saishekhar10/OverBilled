@@ -33,7 +33,24 @@ export default async function AnalysisPage({ params }: AnalysisPageProps) {
   } | null
 
   const riskLevel = (extracted?.risk_level ?? 'LOW') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
-  const totalRecoverable = issues.reduce((sum, issue) => sum + issue.amount_at_risk, 0)
+  // Only structural errors count toward the recoverable figure.
+  // EXCESSIVE_FACILITY_FEE issues are benchmark context, not guaranteed recovery.
+  const STRUCTURAL_TYPES = new Set([
+    'DUPLICATE_CHARGE',
+    'UPCODING',
+    'UNBUNDLING',
+    'BUNDLING_VIOLATION',
+    'CODING_MISMATCH',
+    'APPEALABLE_DENIAL',
+    'OTHER',
+  ])
+  const totalRecoverable = issues
+    .filter((issue) => STRUCTURAL_TYPES.has(issue.type))
+    .reduce((sum, issue) => sum + issue.amount_at_risk, 0)
+
+  const uniqueIssues = Array.from(
+    new Map(issues.map(issue => [issue.id, issue])).values()
+  )
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
@@ -48,7 +65,9 @@ export default async function AnalysisPage({ params }: AnalysisPageProps) {
           <div className="flex items-center gap-3 mb-3">
             <RiskBadge level={riskLevel} />
             <span className="text-2xl font-bold text-gray-900">
-              ${totalRecoverable.toLocaleString()} recoverable
+              {totalRecoverable > 0
+                ? `$${totalRecoverable.toLocaleString()} in billing errors`
+                : 'No structural errors found'}
             </span>
           </div>
           <p className="text-gray-600">{analysis.summary}</p>
@@ -57,13 +76,13 @@ export default async function AnalysisPage({ params }: AnalysisPageProps) {
         {/* Issues */}
         <div>
           <h2 className="text-gray-900 font-semibold text-lg mb-3">
-            Issues found ({issues.length})
+            Issues found ({uniqueIssues.length})
           </h2>
           <div className="space-y-3">
-            {issues.map((issue) => (
-              <IssueCard key={issue.id} issue={issue} />
+            {uniqueIssues.map((issue, index) => (
+              <IssueCard key={`${issue.id}-${index}`} issue={issue} />
             ))}
-            {issues.length === 0 && (
+            {uniqueIssues.length === 0 && (
               <p className="text-gray-500 text-sm">No issues found.</p>
             )}
           </div>

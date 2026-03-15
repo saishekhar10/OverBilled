@@ -121,6 +121,33 @@ async function seedGpci() {
   console.log(`gpci: ${rows.length} rows loaded`)
 }
 
+// Full state name → 2-letter abbreviation mapping
+// The LOCCO file stores full state names (e.g. "TEXAS ") not abbreviations.
+// Taking .slice(0,2) of the name produces wrong codes (e.g. "TE" for Texas).
+const STATE_NAME_TO_ABBR: Record<string, string> = {
+  'ALABAMA': 'AL', 'ALASKA': 'AK', 'ARIZONA': 'AZ', 'ARKANSAS': 'AR',
+  'CALIFORNIA': 'CA', 'COLORADO': 'CO', 'CONNECTICUT': 'CT', 'DELAWARE': 'DE',
+  'DISTRICT OF COLUMBIA': 'DC', 'FLORIDA': 'FL', 'GEORGIA': 'GA',
+  'HAWAII': 'HI', 'HAWAII/GUAM': 'HI', 'IDAHO': 'ID', 'ILLINOIS': 'IL',
+  'INDIANA': 'IN', 'IOWA': 'IA', 'KANSAS': 'KS', 'KENTUCKY': 'KY',
+  'LOUISIANA': 'LA', 'MAINE': 'ME', 'MARYLAND': 'MD', 'MASSACHUSETTS': 'MA',
+  'MICHIGAN': 'MI', 'MINNESOTA': 'MN', 'MISSISSIPPI': 'MS', 'MISSOURI': 'MO',
+  'MONTANA': 'MT', 'NEBRASKA': 'NE', 'NEVADA': 'NV', 'NEW HAMPSHIRE': 'NH',
+  'NEW JERSEY': 'NJ', 'NEW MEXICO': 'NM', 'NEW YORK': 'NY',
+  'NORTH CAROLINA': 'NC', 'NORTH DAKOTA': 'ND', 'OHIO': 'OH',
+  'OKLAHOMA': 'OK', 'OREGON': 'OR', 'PENNSYLVANIA': 'PA',
+  'PUERTO RICO': 'PR', 'RHODE ISLAND': 'RI', 'SOUTH CAROLINA': 'SC',
+  'SOUTH DAKOTA': 'SD', 'TENNESSEE': 'TN', 'TEXAS': 'TX', 'UTAH': 'UT',
+  'VERMONT': 'VT', 'VIRGIN ISLANDS': 'VI', 'VIRGINIA': 'VA',
+  'WASHINGTON': 'WA', 'WEST VIRGINIA': 'WV', 'WISCONSIN': 'WI',
+  'WYOMING': 'WY',
+}
+
+function toStateAbbr(name: string): string {
+  const key = name.trim().toUpperCase()
+  return STATE_NAME_TO_ABBR[key] ?? key.replace(/\s+/g, '').slice(0, 2)
+}
+
 async function seedLocalityCounty() {
   console.log('Loading locality/county crosswalk...')
   const raw = fs.readFileSync(
@@ -168,8 +195,7 @@ async function seedLocalityCounty() {
     rows.push({
       mac:             lastMac,
       locality_number: lastLocality,
-      // Strip trailing spaces and normalize state to 2-letter abbreviation
-      state:           lastState.trim().replace(/\s+/g, '').slice(0, 2),
+      state:           toStateAbbr(lastState),
       locality_name:   area ?? '',
       counties:        counties ?? '',
       is_statewide:    isStatewide,

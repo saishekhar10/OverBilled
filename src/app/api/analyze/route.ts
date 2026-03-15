@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { analyzeDocument, type AnalysisResult } from '@/lib/analyze'
 
 const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
@@ -17,6 +18,20 @@ export async function POST(request: Request) {
   if (authError || !user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  // When a Bearer token is present, create a user-context client so that
+  // storage and DB operations carry the user's auth (the SSR cookie client
+  // only works for browser sessions).
+  const authedSupabase = token
+    ? createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+          auth: { autoRefreshToken: false, persistSession: false },
+        }
+      )
+    : supabase
 
   // Parse multipart form data
   let formData: FormData
@@ -40,6 +55,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'File exceeds 10MB limit' }, { status: 400 })
   }
 
+  const providerState = (formData.get('provider_state') as string)?.trim().toUpperCase()
+  const providerCounty = (formData.get('provider_county') as string)?.trim().toUpperCase()
+
+  if (!providerState || !providerCounty) {
+    return NextResponse.json(
+      { error: 'provider_state and provider_county are required' },
+      { status: 400 }
+    )
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer())
   let documentId: string | null = null
 
@@ -47,7 +72,7 @@ export async function POST(request: Request) {
   const timestamp = Date.now()
   const storagePath = `${user.id}/uploads/${timestamp}-${file.name}`
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await authedSupabase.storage
     .from('uploads')
     .upload(storagePath, buffer, { contentType: file.type, upsert: false })
 
@@ -57,7 +82,7 @@ export async function POST(request: Request) {
   }
 
   // Step 2: Create document row
-  const { data: document, error: insertError } = await supabase
+  const { data: document, error: insertError } = await authedSupabase
     .from('documents')
     .insert({
       user_id: user.id,
@@ -79,17 +104,17 @@ export async function POST(request: Request) {
   // Step 3: Call Claude extraction
   let result: AnalysisResult
   try {
-    result = await analyzeDocument(buffer, file.type)
+    result = await analyzeDocument(buffer, file.type, providerState, providerCounty)
   } catch (err) {
     console.error('Claude analysis error:', err)
-    await supabase.from('documents').update({ status: 'error' }).eq('id', documentId)
+    await authedSupabase.from('documents').update({ status: 'error' }).eq('id', documentId)
     return NextResponse.json({ error: 'Analysis failed' }, { status: 500 })
   }
 
   // Step 4: Write analysis to database
   const { issues, summary, ...extractedData } = result
 
-  const { data: analysis, error: analysisError } = await supabase
+  const { data: analysis, error: analysisError } = await authedSupabase
     .from('analyses')
     .insert({
       document_id: documentId,
@@ -102,19 +127,19 @@ export async function POST(request: Request) {
 
   if (analysisError || !analysis) {
     console.error('Analysis insert error:', analysisError)
-    await supabase.from('documents').update({ status: 'error' }).eq('id', documentId)
+    await authedSupabase.from('documents').update({ status: 'error' }).eq('id', documentId)
     return NextResponse.json({ error: 'Failed to save analysis' }, { status: 500 })
   }
 
   // Step 5: Update document status and type
-  const { error: updateError } = await supabase
+  const { error: updateError } = await authedSupabase
     .from('documents')
     .update({ type: result.document_type, status: 'analyzed' })
     .eq('id', documentId)
 
   if (updateError) {
     console.error('Document update error:', updateError)
-    await supabase.from('documents').update({ status: 'error' }).eq('id', documentId)
+    await authedSupabase.from('documents').update({ status: 'error' }).eq('id', documentId)
     return NextResponse.json({ error: 'Failed to update document status' }, { status: 500 })
   }
 

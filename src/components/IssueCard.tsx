@@ -51,9 +51,9 @@ export default function IssueCard({ issue }: IssueCardProps) {
       {issue.cpt_codes.length > 0 && (
         <div className="flex flex-wrap gap-1 pt-1">
           <span className="text-gray-500 text-xs mr-1">CPT codes:</span>
-          {issue.cpt_codes.map((code) => (
+          {issue.cpt_codes.map((code, index) => (
             <span
-              key={code}
+              key={`${code}-${index}`}
               className="bg-gray-100 text-gray-600 text-xs px-2 py-0.5 rounded-full"
             >
               {code}
