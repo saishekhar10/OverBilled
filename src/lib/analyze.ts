@@ -217,24 +217,58 @@ Return this exact JSON schema:
 }`
 
 export async function analyzeDocument(
-  fileBuffer: Buffer,
+  fileBufferOrPages: Buffer | Buffer[],
   mimeType: string,
   providerState: string,
   providerCounty: string
 ): Promise<AnalysisResult> {
-  const base64 = fileBuffer.toString('base64')
+  const isMultiPage = Array.isArray(fileBufferOrPages)
 
-  const supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-  const isPdf = mimeType === 'application/pdf'
-  const isImage = supportedImageTypes.includes(mimeType)
+  let userContent: Parameters<typeof anthropic.messages.create>[0]['messages'][0]['content']
 
-  if (!isPdf && !isImage) {
-    throw new Error(`Unsupported MIME type: ${mimeType}. Supported types: PDF and images (JPEG, PNG, GIF, WebP).`)
+  if (isMultiPage) {
+    const pages = fileBufferOrPages as Buffer[]
+    userContent = [
+      ...pages.map((buf) => ({
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: 'image/jpeg' as const,
+          data: buf.toString('base64'),
+        },
+      })),
+      {
+        type: 'text' as const,
+        text: `This is a ${pages.length}-page medical document. Please analyze all pages together and return the JSON analysis.`,
+      },
+    ]
+  } else {
+    const fileBuffer = fileBufferOrPages as Buffer
+    const base64 = fileBuffer.toString('base64')
+
+    const supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    const isPdf = mimeType === 'application/pdf'
+    const isImage = supportedImageTypes.includes(mimeType)
+
+    if (!isPdf && !isImage) {
+      throw new Error(`Unsupported MIME type: ${mimeType}. Supported types: PDF and images (JPEG, PNG, GIF, WebP).`)
+    }
+
+    const contentSource = isPdf
+      ? ({ type: 'base64', media_type: 'application/pdf', data: base64 } as const)
+      : ({ type: 'base64', media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64 } as const)
+
+    userContent = [
+      {
+        type: isPdf ? 'document' : 'image',
+        source: contentSource,
+      } as never,
+      {
+        type: 'text' as const,
+        text: 'Please analyze this medical document and return the JSON analysis.',
+      },
+    ]
   }
-
-  const contentSource = isPdf
-    ? ({ type: 'base64', media_type: 'application/pdf', data: base64 } as const)
-    : ({ type: 'base64', media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64 } as const)
 
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
@@ -243,16 +277,7 @@ export async function analyzeDocument(
     messages: [
       {
         role: 'user',
-        content: [
-          {
-            type: isPdf ? 'document' : 'image',
-            source: contentSource,
-          } as never,
-          {
-            type: 'text',
-            text: 'Please analyze this medical document and return the JSON analysis.',
-          },
-        ],
+        content: userContent,
       },
     ],
   })
